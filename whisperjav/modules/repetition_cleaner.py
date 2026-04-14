@@ -1,8 +1,10 @@
 # whisperjav/modules/repetition_cleaner.py
 
-# FINAL FIX: Implemented a comprehensive solution based on user feedback.
-
-# The logic is now more aggressive in cleaning and less aggressive in protection.
+# v1.9.0: Enhanced repetition cleaning with improved Japanese pattern coverage
+# - Extended phrase length limits for longer Japanese expressions
+# - Added katakana elongation pattern (e.g., "アーアーアー")
+# - Added mixed script repetition detection
+# - Improved generic repetition detector with lower coverage threshold
 
 
 

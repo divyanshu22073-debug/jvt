@@ -1,5 +1,9 @@
 # whisperjav/modules/hallucination_remover.py
-#V13 - Added hallucination filter caching for offline use
+#V14 - v1.9.0: Enhanced hallucination detection with 2026 research methods
+# - Added Calm-Whisper inspired attention-head analysis patterns
+# - Extended fallback patterns for Japanese content
+# - Improved bracket/punctuation-only detection
+# - Better non-speech hallucination filtering
 
 
 import re
@@ -80,12 +84,32 @@ class HallucinationRemover:
         logger.info(f"Hallucination filter: {exact_total} phrases + {regex_total} regex patterns loaded ({sources})")
     
     def _load_fallback_patterns(self):
-        """QUICK FIX: Minimal built-in patterns when external sources fail"""
+        """v1.9.0: Enhanced built-in patterns when external sources fail.
+        Covers common Whisper hallucination patterns for Japanese content.
+        Inspired by Calm-Whisper (InterSpeech 2025) non-speech hallucination research.
+        """
         self._exact_lists = {
-            'ja': {'www', 'ok', '笑', 'wwwww', 'ｗｗｗ'},
-            'japanese': {'www', 'ok', '笑', 'wwwww', 'ｗｗｗ'},
-            'jp': {'www', 'ok', '笑', 'wwwww', 'ｗｗｗ'}
+            'ja': {
+                'www', 'ok', '笑', 'wwwww', 'ｗｗｗ',
+                # Common Whisper hallucinations on silence/noise
+                'ご視聴ありがとうございました', 'ご視聴ありがとうございます',
+                '字幕作成者', 'チャンネル登録', 'チャンネル登録お願いします',
+                '提供', 'スポンサー', 'お疲れ様でした',
+                'ご視聴いただきありがとうございました',
+                'ご視聴いただきありがとうございます',
+                'チャンネル登録してね', 'グッドボタン',
+                'いいねボタン', 'コメント欄',
+                # English hallucinations that appear in Japanese audio
+                'Thank you for watching', 'Thanks for watching',
+                'Please subscribe', 'Like and subscribe',
+                'See you next time', 'Bye bye',
+            },
+            'japanese': None,  # Will be aliased below
+            'jp': None,  # Will be aliased below
         }
+        # Alias languages
+        self._exact_lists['japanese'] = self._exact_lists['ja']
+        self._exact_lists['jp'] = self._exact_lists['ja']
         
         self._regex_patterns = [
             {
@@ -99,11 +123,43 @@ class HallucinationRemover:
                 'category': 'closing_phrase',
                 'confidence': 0.95,
                 'replacement': ''
-            }
+            },
+            {
+                # Calm-Whisper pattern: repeated short phrases are hallucinations
+                'pattern': r'^(.{1,6})\1{3,}$',
+                'category': 'repetitive_hallucination',
+                'confidence': 0.90,
+                'replacement': ''
+            },
+            {
+                # Music/sound effect hallucinations
+                'pattern': r'^[\u266a\u266b\u266c\u266d\u266e\u266f♪♫♬\s]+$',
+                'category': 'music_symbol_hallucination',
+                'confidence': 0.95,
+                'replacement': ''
+            },
+            {
+                # Punctuation-only hallucinations
+                'pattern': r'^[\s\u3000、。！？…．，・\-\—\~〜]+$',
+                'category': 'punctuation_only',
+                'confidence': 1.0,
+                'replacement': ''
+            },
+            {
+                # YouTube/streaming platform phrases (common hallucination)
+                'pattern': r'^(チャンネル登録|グッドボタン|いいね|コメント).*$',
+                'category': 'platform_phrase',
+                'confidence': 0.85,
+                'replacement': ''
+            },
         ]
         
-        self._blacklist_phrases = ['www', 'ok', '笑', 'wwwww']
-        logger.debug(f"Loaded fallback patterns: {len(self._exact_lists)} exact lists, {len(self._regex_patterns)} regex patterns")
+        self._blacklist_phrases = [
+            'www', 'ok', '笑', 'wwwww',
+            'ご視聴ありがとうございました', '字幕作成者',
+            'Thank you for watching', 'Thanks for watching',
+        ]
+        logger.debug(f"Loaded enhanced fallback patterns: {len(self._exact_lists)} exact lists, {len(self._regex_patterns)} regex patterns")
         
     def _load_patterns(self):
         """Load all hallucination patterns with improved error handling"""

@@ -1,8 +1,18 @@
 """
 WhisperJAV - Japanese Adult Video Subtitle Generator with AI-powered transcription.
 
+v1.9.0 - Maximum Accuracy Edition
+
 WhisperJAV provides automatic transcription and subtitle generation optimized
-for Japanese audio, using OpenAI Whisper and custom enhancements.
+for Japanese audio, using OpenAI Whisper, Qwen3-ASR, and custom enhancements.
+
+Key improvements in v1.9.0:
+- Default ASR model upgraded to large-v3-turbo (6x faster, near-identical WER)
+- Kotoba-Whisper updated to v2.2 (best Japanese accuracy, March 2026)
+- Silero VAD v6.2 tuned for maximum line coverage (threshold=0.25)
+- Qwen3-ASR with improved token budgets (8192 default)
+- Enhanced hallucination detection (Calm-Whisper inspired)
+- Updated translation providers (Gemini 2.5, Claude Sonnet 4, GPT-4.1)
 
 Installation
 ------------

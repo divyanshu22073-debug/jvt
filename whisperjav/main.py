@@ -145,7 +145,7 @@ def print_banner():
 ╔═══════════════════════════════════════════════════╗
 ║{f'          WhisperJAV v{__version_display__}':<51}║
 ║   Japanese Adult Video Subtitle Generator         ║
-║                                                   ║
+║   Max Accuracy Edition                            ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 """
@@ -318,7 +318,7 @@ def parse_arguments():
     tuning_group = parser.add_argument_group("Transcription Tuning")
     tuning_group.add_argument("--sensitivity",
                              choices=["conservative", "balanced", "aggressive"],
-                             default="aggressive", help="Transcription sensitivity")
+                             default="aggressive", help="Transcription sensitivity (default: aggressive for max line coverage)")
     tuning_group.add_argument("--scene-detection-method",
                              type=str,
                              choices=["auditok", "silero", "semantic"],
@@ -340,12 +340,12 @@ def parse_arguments():
                                  "whisper-vad", "whisper-vad-tiny", "whisper-vad-base", "whisper-vad-medium",
                                  "ten", "none"
                              ],
-                             default=None,  # None = use silero (default)
+                             default=None,  # None = use silero-v6.2 (default, best accuracy)
                              metavar="BACKEND",
                              help=(
                                  "Speech segmentation backend: "
-                                 "silero/silero-v4.0 (default), silero-v3.1, "
-                                 "silero-v6.2 (pip pkg, max_speech_duration_s + hysteresis), "
+                                 "silero-v6.2 (default, best accuracy - 16%% fewer errors vs v5), "
+                                 "silero/silero-v4.0, silero-v3.1, "
                                  "nemo/nemo-lite (fast frame VAD ~0.5GB), "
                                  "whisper-vad (neural VAD using Whisper small model ~500MB), "
                                  "whisper-vad-tiny/base/medium (other model sizes), "
@@ -460,8 +460,8 @@ def parse_arguments():
     # HuggingFace Transformers mode arguments
     hf_group = parser.add_argument_group("HuggingFace Transformers Mode Options (--mode transformers)")
     hf_group.add_argument("--hf-model-id", type=str,
-                         default="kotoba-tech/kotoba-whisper-bilingual-v1.0",
-                         help="HuggingFace model ID (default: kotoba-tech/kotoba-whisper-bilingual-v1.0)")
+                         default="kotoba-tech/kotoba-whisper-v2.2",
+                         help="HuggingFace model ID (default: kotoba-tech/kotoba-whisper-v2.2)")
     hf_group.add_argument("--hf-chunk-length", type=int, default=15,
                          help="Chunk length in seconds (default: 15)")
     hf_group.add_argument("--hf-stride", type=float, default=None,
@@ -573,12 +573,12 @@ def parse_arguments():
     qwen_gen_group = parser.add_argument_group("Qwen3-ASR: Generation")
     qwen_gen_group.add_argument("--qwen-batch-size", type=int, default=1,
                            help="Maximum inference batch size (default: 1 for accuracy)")
-    qwen_gen_group.add_argument("--qwen-max-tokens", type=int, default=4096,
-                           help="Maximum tokens to generate (default: 4096, supports ~10 min audio)")
-    qwen_gen_group.add_argument("--qwen-repetition-penalty", type=float, default=1.1,
-                           help="Repetition penalty (1.0=off, >1.0=penalize repeats; default: 1.1)")
-    qwen_gen_group.add_argument("--qwen-max-tokens-per-second", type=float, default=20.0,
-                           help="Dynamic token budget per audio second (0=disabled; default: 20.0)")
+    qwen_gen_group.add_argument("--qwen-max-tokens", type=int, default=8192,
+                           help="Maximum tokens to generate (default: 8192, supports ~10 min audio)")
+    qwen_gen_group.add_argument("--qwen-repetition-penalty", type=float, default=1.15,
+                           help="Repetition penalty (1.0=off, >1.0=penalize repeats; default: 1.15)")
+    qwen_gen_group.add_argument("--qwen-max-tokens-per-second", type=float, default=25.0,
+                           help="Dynamic token budget per audio second (0=disabled; default: 25.0)")
 
     # ── Qwen3-ASR: Alignment ─────────────────────────────────────────────
     qwen_align_group = parser.add_argument_group("Qwen3-ASR: Alignment")
@@ -1078,7 +1078,7 @@ def process_files_sync(media_files: List[Dict], args: argparse.Namespace, resolv
             keep_temp_files=args.keep_temp,
             save_metadata_json=getattr(args, 'debug', False),  # --debug enables metadata JSON preservation
             progress_display=progress,
-            hf_model_id=getattr(args, 'hf_model_id', 'kotoba-tech/kotoba-whisper-bilingual-v1.0'),
+            hf_model_id=getattr(args, 'hf_model_id', 'kotoba-tech/kotoba-whisper-v2.2'),
             hf_chunk_length=getattr(args, 'hf_chunk_length', 15),
             hf_stride=getattr(args, 'hf_stride', None),
             hf_batch_size=getattr(args, 'hf_batch_size', 16),
@@ -1147,7 +1147,7 @@ def process_files_sync(media_files: List[Dict], args: argparse.Namespace, resolv
             "device": getattr(args, 'qwen_device', 'auto'),
             "dtype": getattr(args, 'qwen_dtype', 'auto'),
             "batch_size": getattr(args, 'qwen_batch_size', 1),
-            "max_new_tokens": getattr(args, 'qwen_max_tokens', 4096),
+            "max_new_tokens": getattr(args, 'qwen_max_tokens', 8192),
             "language": (lambda _l: None if _l in (None, "auto", "") else _l)(getattr(args, 'qwen_language', 'Japanese')),
             "timestamps": getattr(args, 'qwen_timestamps', 'word'),
             "aligner_id": getattr(args, 'qwen_aligner', 'Qwen/Qwen3-ForcedAligner-0.6B'),
@@ -1167,8 +1167,8 @@ def process_files_sync(media_files: List[Dict], args: argparse.Namespace, resolv
             # Assembly text cleaner
             "assembly_cleaner": getattr(args, 'qwen_assembly_cleaner', True),
             # Generation safety controls
-            "repetition_penalty": getattr(args, 'qwen_repetition_penalty', 1.1),
-            "max_tokens_per_audio_second": getattr(args, 'qwen_max_tokens_per_second', 20.0),
+            "repetition_penalty": getattr(args, 'qwen_repetition_penalty', 1.15),
+            "max_tokens_per_audio_second": getattr(args, 'qwen_max_tokens_per_second', 25.0),
         }
         # Pipeline-owned defaults: only forward when user explicitly sets a value
         _scene_min = getattr(args, 'qwen_scene_min_duration', None)

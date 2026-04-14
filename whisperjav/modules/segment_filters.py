@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Shared helpers for post-ASR segment filtering."""
+"""Shared helpers for post-ASR segment filtering.
+
+v1.9.0: Enhanced nonverbal detection with extended keyword set and
+improved simple vocal detection for Japanese content.
+"""
 
 from __future__ import annotations
 

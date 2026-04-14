@@ -44,7 +44,10 @@ class FasterWhisperProASR:
         # Parameter tracer for capturing transcribe() call parameters
         self.tracer = tracer if tracer is not None else NullTracer()
         # --- V3 PARAMETER UNPACKING ---
-        self.model_name = model_config.get("model_name", "large-v2")
+        # v1.9.0: Default to large-v3-turbo for best speed/accuracy balance
+        # large-v3-turbo: 6x faster than large-v3, near-identical WER (Whisper team benchmark)
+        # For absolute max accuracy, user can override with --model large-v3
+        self.model_name = model_config.get("model_name", "large-v3-turbo")
         # Use smart device detection: CUDA -> MPS -> CPU
         self.device = model_config.get("device", get_best_device())
 
@@ -84,7 +87,8 @@ class FasterWhisperProASR:
 
         # Determine speech segmenter backend FIRST (needed for firewall below)
         speech_segmenter_config = params.get("speech_segmenter", {})
-        segmenter_backend = speech_segmenter_config.get("backend", "silero-v4.0")
+        # v1.9.0: Default to Silero v6.2 for improved accuracy (16% fewer errors)
+        segmenter_backend = speech_segmenter_config.get("backend", "silero-v6.2")
 
         # --- CONSTRUCTOR FIREWALL ---
         # The resolver unconditionally produces Silero VAD presets (threshold=0.068,
@@ -103,8 +107,10 @@ class FasterWhisperProASR:
             vad_params = {}
 
         # VAD parameters for logging (now clean after firewall for non-Silero)
-        self.vad_threshold = vad_params.get("threshold", 0.18)
-        self.min_speech_duration_ms = vad_params.get("min_speech_duration_ms", 100)
+        # v1.9.0: Lowered default threshold for max line coverage
+        # 0.15 captures more speech segments including soft utterances
+        self.vad_threshold = vad_params.get("threshold", 0.15)
+        self.min_speech_duration_ms = vad_params.get("min_speech_duration_ms", 80)
 
         # Speech Segmenter merge — defense-in-depth guard (firewall already blanked
         # vad_params for non-Silero, but this guard prevents accidental merge even if

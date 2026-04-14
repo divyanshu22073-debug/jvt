@@ -31,10 +31,11 @@ class SileroV6SpeechSegmenter:
     Uses the silero-vad pip package API (load_silero_vad, get_speech_timestamps)
     with v6.2 features: max_speech_duration_s, neg_threshold, and speech_pad_ms.
 
-    JAV-tuned defaults:
-    - threshold=0.35: Captures speech overlapping with breathing/moaning
-    - speech_pad_ms=350: Capture Japanese soft onsets and trailing particles (ね, よ, わ)
-    - min_speech_duration_ms=100: Preserve short utterances (はい, ね, うん)
+    JAV-tuned defaults (v1.9.0 - max line coverage):
+    - threshold=0.25: Aggressive capture of speech even overlapping with background noise
+    - speech_pad_ms=400: Extended capture of Japanese soft onsets and trailing particles (ね, よ, わ, の)
+    - min_speech_duration_ms=80: Preserve very short utterances (はい, うん, ん, え)
+    - min_silence_duration_ms=80: Detect very short pauses in rapid Japanese dialogue
     - max_speech_duration_s inherits from max_group_duration_s as safety net
 
     Example:
@@ -44,12 +45,12 @@ class SileroV6SpeechSegmenter:
 
     def __init__(
         self,
-        threshold: float = 0.35,
+        threshold: float = 0.25,
         neg_threshold: Optional[float] = None,
-        min_speech_duration_ms: int = 100,
+        min_speech_duration_ms: int = 80,
         max_speech_duration_s: Optional[float] = None,
-        min_silence_duration_ms: int = 100,
-        speech_pad_ms: int = 350,
+        min_silence_duration_ms: int = 80,
+        speech_pad_ms: int = 400,
         min_silence_at_max_speech: int = 98,
         use_max_poss_sil_at_max_speech: bool = True,
         chunk_threshold_s: Optional[float] = 1.0,
@@ -61,21 +62,21 @@ class SileroV6SpeechSegmenter:
 
         Args:
             threshold: Speech probability threshold [0.0, 1.0]. Higher = more
-                selective. Default 0.35 (JAV-tuned: captures speech overlapping
-                with breathing/moaning; v6.2 library default is 0.5).
+                selective. Default 0.25 (v1.9.0 JAV-tuned: aggressive speech capture
+                for maximum line coverage; v6.2 library default is 0.5).
             neg_threshold: Hysteresis threshold for speech end detection.
                 None = auto-calculated as threshold - 0.15 by v6.2.
                 Provides stable segmentation in noisy audio.
             min_speech_duration_ms: Minimum speech segment duration.
-                Default 100ms to preserve short Japanese utterances.
+                Default 80ms to preserve very short Japanese utterances (はい, うん, え).
             max_speech_duration_s: Force-split long speech at internal silences.
                 None = inherits from max_group_duration_s (key safety net).
             min_silence_duration_ms: Minimum silence gap to split segments.
-                Default 100ms (v6.2 default, detects short pauses).
+                Default 80ms (detects very short pauses in rapid Japanese dialogue).
             speech_pad_ms: Padding around speech segments (handled internally
                 by v6.2, no manual sample-based padding needed).
-                Default 250ms to capture Japanese soft onsets and trailing
-                particles/breath tails that get clipped at 200ms.
+                Default 400ms to capture Japanese soft onsets and trailing
+                particles/breath tails that get clipped at shorter padding.
             min_silence_at_max_speech: Minimum silence duration (ms) used when
                 splitting at max_speech_duration_s. Default 98 (v6.2 default).
             use_max_poss_sil_at_max_speech: When splitting at max_speech_duration_s,

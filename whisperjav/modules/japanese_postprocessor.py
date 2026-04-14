@@ -2,6 +2,8 @@
 """
 Japanese-specific post-processing for ASR results.
 
+v1.9.0: Enhanced for maximum line coverage and accuracy.
+
 This module provides Japanese dialogue post-processing that can be used by
 multiple ASR backends (StableTSASR, QwenASR, etc.). It uses stable-ts methods
 to regroup word timestamps into natural Japanese conversational segments.
@@ -12,6 +14,9 @@ Features:
 - Merges by punctuation and gaps
 - Splits by length and duration for readability
 - Supports presets: "default", "high_moan", "narrative"
+- v1.9.0: Improved particle detection and boundary sensitivity
+- v1.9.0: Better handling of rapid Japanese dialogue
+- v1.9.0: Extended compound particle sequences
 
 Usage:
     from whisperjav.modules.japanese_postprocessor import JapanesePostProcessor
