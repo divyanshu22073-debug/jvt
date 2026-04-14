@@ -225,7 +225,7 @@ enhance = [
 # Install with: pip install whisperjav[huggingface]
 huggingface = [
     "huggingface-hub>=0.25.0",
-    "transformers>=4.40.0",
+    "transformers>=4.45.0",
     "accelerate>=0.26.0",
     "hf_xet",  # Faster HuggingFace downloads
 ]
@@ -234,7 +234,7 @@ huggingface = [
 # Install with: pip install whisperjav[qwen]
 # Note: Requires huggingface extra for transformers backend
 qwen = [
-    "qwen-asr>=0.0.6",
+    "qwen-asr>=0.0.8",
     "whisperjav[huggingface]",  # Transformers/torch dependency
 ]
 

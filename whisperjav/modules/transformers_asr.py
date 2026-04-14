@@ -37,8 +37,9 @@ class TransformersASR:
     long audio files.
     """
 
-    # Default values optimized for kotoba-whisper-bilingual-v1.0
-    DEFAULT_MODEL_ID = "kotoba-tech/kotoba-whisper-bilingual-v1.0"
+    # v1.9.0: Updated to kotoba-whisper-v2.2 (March 2026, best Japanese accuracy)
+    # Built on Whisper large-v3 encoder, Japanese-optimized decoder
+    DEFAULT_MODEL_ID = "kotoba-tech/kotoba-whisper-v2.2"
     DEFAULT_CHUNK_LENGTH = 15  # Optimal for distil-large-v3 architecture
     DEFAULT_STRIDE = None  # None = chunk_length / 6
     DEFAULT_BATCH_SIZE = 16  # Kotoba recommends 16

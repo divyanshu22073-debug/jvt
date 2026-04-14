@@ -204,11 +204,11 @@ class QwenASR:
     # NOTE: batch_size=1 produces more accurate transcriptions than larger batches
     DEFAULT_BATCH_SIZE = 1
 
-    # Token limit for generation
-    # Calculation: 10 min audio × 400 chars/min × 2 tokens/char = 8000 tokens
-    # Default 4096 provides safe coverage for ~5-10 min audio segments
+    # v1.9.0: Increased token limit for max coverage
+    # Calculation: 10 min audio x 400 chars/min x 2 tokens/char = 8000 tokens
+    # Default 8192 provides safe coverage for ~10 min audio segments
     # For longer audio, scene detection should split into manageable chunks
-    DEFAULT_MAX_NEW_TOKENS = 4096
+    DEFAULT_MAX_NEW_TOKENS = 8192
 
     # qwen-asr internal limits (from qwen_asr.inference.utils)
     # Used for warnings and documentation
@@ -232,10 +232,10 @@ class QwenASR:
         # Japanese post-processing (v1.8.4+)
         japanese_postprocess: bool = True,  # Apply Japanese-specific regrouping
         postprocess_preset: str = "high_moan",  # Preset: "high_moan" (default for JAV), "default", "narrative"
-        # Generation safety controls (v1.8.9+)
-        repetition_penalty: float = 1.0,          # 1.0 = off; >1.0 penalizes repeated tokens via HF generation_config
-        max_tokens_per_audio_second: float = 0.0,  # 0 = disabled; >0 = dynamic per-scene token budget scaling
-        min_tokens_floor: int = 256,               # minimum token budget when dynamic scaling is active
+        # Generation safety controls (v1.9.0: tuned for max accuracy)
+        repetition_penalty: float = 1.15,          # 1.0 = off; >1.0 penalizes repeated tokens via HF generation_config
+        max_tokens_per_audio_second: float = 25.0,  # 0 = disabled; >0 = dynamic per-scene token budget scaling
+        min_tokens_floor: int = 384,               # minimum token budget when dynamic scaling is active
     ):
         """
         Initialize QwenASR.

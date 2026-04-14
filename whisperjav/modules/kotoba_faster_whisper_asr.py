@@ -34,8 +34,9 @@ class KotobaFasterWhisperASR:
     Silero VAD, controllable via the vad_filter parameter.
     """
 
-    # Default model identifier
-    DEFAULT_MODEL = "kotoba-tech/kotoba-whisper-v2.0-faster"
+    # v1.9.0: Updated to kotoba-whisper-v2.2-faster (March 2026)
+    # Built on Whisper large-v3 encoder, best Japanese accuracy with faster-whisper backend
+    DEFAULT_MODEL = "kotoba-tech/kotoba-whisper-v2.2-faster"
 
     def __init__(self, model_config: Dict[str, Any], params: Dict[str, Any], task: str):
         """

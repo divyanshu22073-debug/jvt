@@ -166,7 +166,8 @@ class KotobaFasterWhisperASRComponent(ASRComponent):
 
     # === ASR-specific ===
     provider = "faster_whisper"
-    model_id = "kotoba-tech/kotoba-whisper-v2.0-faster"
+    # v1.9.0: Updated to kotoba-whisper-v2.2-faster (March 2026)
+    model_id = "kotoba-tech/kotoba-whisper-v2.2-faster"
     supported_tasks = ["transcribe", "translate"]
     compatible_vad = ["none"]  # Uses internal VAD, not external
 

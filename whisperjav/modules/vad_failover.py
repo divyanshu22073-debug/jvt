@@ -1,4 +1,8 @@
-"""Utility helpers for deciding when to bypass VAD and transcribe the full clip."""
+"""Utility helpers for deciding when to bypass VAD and transcribe the full clip.
+
+v1.9.0: Lowered min_duration_for_fallback and improved coverage detection
+to ensure maximum line coverage even when VAD is too conservative.
+"""
 from __future__ import annotations
 
 from typing import Iterable, List, Dict
@@ -26,13 +30,14 @@ def _speech_coverage_seconds(flat_segments: List[Dict[str, float]]) -> float:
 def should_force_full_transcribe(
     vad_segments: Iterable[Iterable[Dict[str, float]]],
     audio_duration: float,
-    min_duration_for_fallback: float = 120.0,
-    min_coverage_ratio: float = 0.01,
+    min_duration_for_fallback: float = 60.0,  # v1.9.0: lowered from 120s to catch more failures
+    min_coverage_ratio: float = 0.005,  # v1.9.0: lowered from 0.01 for aggressive coverage
 ) -> bool:
     """Decide whether VAD output looks obviously wrong and warrants a full-clip pass.
 
+    v1.9.0: More aggressive fallback thresholds to ensure maximum line coverage.
     The heuristic keeps the original behaviour for short clips while catching the
-    failure mode reported by users where long scenes (>10 minutes) end up with only
+    failure mode reported by users where long scenes (>1 minute) end up with only
     a handful of subtitles or none at all because VAD returned almost no speech.
     """
     if audio_duration <= 0:
@@ -51,7 +56,7 @@ def should_force_full_transcribe(
         return True
 
     # If VAD only detected a single tiny blob on a very long clip, treat it as failure.
-    if len(flat_segments) <= 2 and audio_duration >= (min_duration_for_fallback * 4):
+    if len(flat_segments) <= 2 and audio_duration >= (min_duration_for_fallback * 3):
         return True
 
     return False

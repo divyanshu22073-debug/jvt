@@ -1,6 +1,7 @@
 """
 Factory for creating speech segmenter instances.
 
+v1.9.0: Default backend changed to silero-v6.2 for maximum accuracy.
 Supports lazy loading to avoid import overhead for unused backends.
 """
 
@@ -100,12 +101,12 @@ _PARAM_SCHEMAS = {
         "end_pad_samples":         (int,   20800, False),
     },
     "silero-v6.2": {
-        "threshold":                        (float, 0.35, False),
+        "threshold":                        (float, 0.25, False),
         "neg_threshold":                    (float, None, True),   # None = auto-calc
-        "min_speech_duration_ms":           (int,   100,  False),
+        "min_speech_duration_ms":           (int,   80,   False),
         "max_speech_duration_s":            (float, None, True),   # None = inherit
-        "min_silence_duration_ms":          (int,   100,  False),
-        "speech_pad_ms":                    (int,   350,  False),
+        "min_silence_duration_ms":          (int,   80,   False),
+        "speech_pad_ms":                    (int,   400,  False),
         "min_silence_at_max_speech":        (int,   98,   False),
         "use_max_poss_sil_at_max_speech":   (bool,  True, False),
         "chunk_threshold_s":                (float, 1.0,  True),

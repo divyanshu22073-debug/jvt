@@ -1,5 +1,7 @@
 """
 Provider configurations for translation services.
+
+Updated for v1.9.0 with latest model versions (April 2026).
 """
 
 PROVIDER_CONFIGS = {
@@ -17,17 +19,17 @@ PROVIDER_CONFIGS = {
     },
     'gemini': {
         'pysubtrans_name': 'Gemini',
-        'model': 'gemini-2.0-flash',
+        'model': 'gemini-2.5-flash',
         'env_var': 'GEMINI_API_KEY'
     },
     'claude': {
         'pysubtrans_name': 'Claude',
-        'model': 'claude-3-5-haiku-20241022',
+        'model': 'claude-sonnet-4-20250514',
         'env_var': 'ANTHROPIC_API_KEY'
     },
     'gpt': {
         'pysubtrans_name': 'OpenAI',
-        'model': 'gpt-4o-mini',
+        'model': 'gpt-4.1-mini',
         'env_var': 'OPENAI_API_KEY'
     },
     'glm': {
@@ -39,7 +41,7 @@ PROVIDER_CONFIGS = {
     },
     'groq': {
         'pysubtrans_name': 'Custom Server',  # Custom Server avoids Responses API misrouting (#178)
-        'model': 'llama-3.3-70b-versatile',
+        'model': 'llama-4-scout-17b-16e-instruct',
         'env_var': 'GROQ_API_KEY',
         'server_address': 'https://api.groq.com',
         'endpoint': '/openai/v1/chat/completions',

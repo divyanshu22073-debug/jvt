@@ -201,7 +201,8 @@ class FasterWhisperASR(ASRComponent):
 
     # === ASR-specific ===
     provider = "faster_whisper"
-    model_id = "large-v3"
+    # v1.9.0: Default to large-v3-turbo (6x faster, near-identical WER to large-v3)
+    model_id = "large-v3-turbo"
     supported_tasks = ["transcribe", "translate"]
     compatible_vad = ["silero", "faster_whisper_vad", "none"]
 

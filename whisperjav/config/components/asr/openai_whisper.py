@@ -167,7 +167,8 @@ class OpenAIWhisperASR(ASRComponent):
 
     # === ASR-specific ===
     provider = "openai_whisper"
-    model_id = "large-v2"
+    # v1.9.0: Default to large-v3 for maximum accuracy
+    model_id = "large-v3"
     supported_tasks = ["transcribe", "translate"]
     compatible_vad = ["silero", "none"]
 
