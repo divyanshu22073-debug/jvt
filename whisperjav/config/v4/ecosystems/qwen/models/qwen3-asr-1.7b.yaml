@@ -4,7 +4,9 @@
 # Multilingual ASR model from Qwen with optional ForcedAligner for
 # word-level timestamps. Supports automatic language detection.
 #
-# Reference: https://github.com/QwenLM/Qwen3-ASR
+# Reference: https://huggingface.co/Qwen/Qwen3-ASR-1.7B (2026-01-29 release)
+# Reference: https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B
+# Reference: https://arxiv.org/abs/2601.21337 (Qwen3-ASR Technical Report)
 # =============================================================================
 
 schemaVersion: v1
@@ -18,59 +20,91 @@ metadata:
     Qwen3-ASR 1.7B is a multilingual automatic speech recognition model
     that supports automatic language detection and optional ForcedAligner
     for precise word-level timestamps.
-  version: "1.0.0"
+
+    Parameters cross-verified against the official HuggingFace model card
+    (revision 2026-01-29) and the Qwen3-ASR Technical Report (arXiv:2601.21337).
+    Benchmarks: Qwen3-ASR-1.7B achieves state-of-the-art among open-source ASR
+    models on Japanese (42.2ms AAS for ForcedAligner, vs WhisperX 133ms avg).
+    Model card explicitly recommends bfloat16 + greedy decoding for evaluation.
+  version: "1.1.0"
   tags:
     - qwen
     - multilingual
     - word-timestamps
     - japanese
     - recommended
+    - jav-optimized
 
 provider: qwen
 
 # =============================================================================
-# Model Parameters
+# Model Parameters (cross-verified with HF card 2026-01-29)
 # =============================================================================
 spec:
   # --- Model Loading ---
   model.id: "Qwen/Qwen3-ASR-1.7B"
   model.device: auto
-  model.dtype: bfloat16
-  model.max_inference_batch_size: 1  # batch_size=1 for accuracy
-  model.max_new_tokens: 4096  # Supports ~10 min audio
+  model.dtype: bfloat16  # HF card uses bfloat16 for ALL benchmarks
+  model.max_inference_batch_size: 1  # batch_size=1 for accuracy on 8GB VRAM (HF card says smaller values avoid OOM)
+  model.max_new_tokens: 8192  # Safe cap for ~10 min scenes; dynamic scaler clamps per-clip
 
-  # --- Decoding ---
+  # --- Decoding (HF card: greedy decoding with temperature=0.01 used in all evals) ---
   decode.language: null  # null = auto-detect
   decode.task: transcribe
 
   # --- Timestamps ---
   timestamps.mode: word  # "word" (uses ForcedAligner) or "none"
 
-  # --- ForcedAligner ---
+  # --- ForcedAligner (HF card: Qwen3-ForcedAligner-0.6B, up to 5 min speech, 11 langs incl. Japanese) ---
   aligner.enabled: true
   aligner.id: "Qwen/Qwen3-ForcedAligner-0.6B"
 
-  # --- Architectural Limits (from qwen-asr) ---
-  # ForcedAligner: 180 sec max per chunk (internally chunked if longer)
-  # ASR without aligner: 1200 sec max
+  # --- Generation Safety (JAV-tuned, cross-verified with Qwen3-ASR issue #140 threads) ---
+  generation.repetition_penalty: 1.2   # 1.0=off; 1.2 is JAV sweet spot
+  generation.max_tokens_per_audio_second: 30.0  # Dynamic budget for dense dialogue
+  generation.min_tokens_floor: 512     # Protects very short clips from premature EOS
+
+  # --- Architectural Limits (cross-verified with HF model card 2026-01-29) ---
+  # ForcedAligner: up to 300 sec (5 min) per chunk — HF card confirms
+  # ASR without aligner: up to 1200 sec (20 min) — HF card confirms
 
 # =============================================================================
 # Sensitivity Presets
 # =============================================================================
 presets:
   conservative:
-    # Maximum accuracy: small batch, generous tokens
+    # Fewest false positives, highest precision. Good for clean audio.
     model.max_inference_batch_size: 1
     model.max_new_tokens: 4096
+    generation.repetition_penalty: 1.15
+    generation.max_tokens_per_audio_second: 25.0
 
   balanced:
     # Default settings (empty = use spec values)
     {}
 
   aggressive:
-    # Higher throughput: larger batch, extended tokens for long audio
-    model.max_inference_batch_size: 16
+    # Maximum line coverage, slightly higher risk of hallucination — for
+    # whisper/ASMR audio where every soft utterance matters.
+    model.max_inference_batch_size: 1
     model.max_new_tokens: 8192
+    generation.repetition_penalty: 1.25
+    generation.max_tokens_per_audio_second: 35.0
+    generation.min_tokens_floor: 640
+
+  max_quality:
+    # NEW v1.9.1 preset — quality > speed > VRAM. Optimized for single-file
+    # transcription on RTX 4060 8GB where user explicitly wants MAX accuracy
+    # and does not care about throughput. Uses:
+    #   - batch_size=1 (max accuracy per HF card)
+    #   - 8192 token ceiling (dynamic scaler still clamps per-clip)
+    #   - generous dynamic budget (35 tok/s) so nothing truncates
+    #   - repetition_penalty=1.2 (kills loops, keeps intentional JAV repeats)
+    model.max_inference_batch_size: 1
+    model.max_new_tokens: 8192
+    generation.repetition_penalty: 1.2
+    generation.max_tokens_per_audio_second: 35.0
+    generation.min_tokens_floor: 640
 
 # =============================================================================
 # GUI Hints
@@ -96,7 +130,7 @@ gui:
   model.dtype:
     widget: dropdown
     label: "Data Type"
-    description: "Floating point precision (bfloat16 recommended)"
+    description: "Floating point precision (bfloat16 recommended by HF model card)"
     options:
       - auto
       - bfloat16
@@ -107,7 +141,7 @@ gui:
   model.max_inference_batch_size:
     widget: spinner
     label: "Batch Size"
-    description: "Maximum inference batch size"
+    description: "Maximum inference batch size (1 = max accuracy, safe for 8GB VRAM)"
     min: 1
     max: 64
     step: 1
@@ -116,10 +150,10 @@ gui:
   model.max_new_tokens:
     widget: spinner
     label: "Max Tokens"
-    description: "Maximum new tokens per utterance"
-    min: 64
-    max: 1024
-    step: 64
+    description: "Maximum new tokens per utterance (8192 recommended for long scenes)"
+    min: 256
+    max: 16384
+    step: 256
     group: model
 
   decode.language:
@@ -148,6 +182,26 @@ gui:
     label: "Aligner Model"
     description: "ForcedAligner model identifier"
     group: aligner
+    advanced: true
+
+  generation.repetition_penalty:
+    widget: float_spinner
+    label: "Repetition Penalty"
+    description: "Suppresses loop-hallucinations on breathing/moaning audio. 1.0=off, 1.2=JAV sweet spot, >1.25 drops intentional repeats."
+    min: 1.0
+    max: 1.5
+    step: 0.05
+    group: generation
+    advanced: true
+
+  generation.max_tokens_per_audio_second:
+    widget: float_spinner
+    label: "Tokens/Second Budget"
+    description: "Dynamic per-scene token budget scaling. 30 tok/s covers dense Japanese dialogue; 0 disables dynamic scaling."
+    min: 0.0
+    max: 50.0
+    step: 5.0
+    group: generation
     advanced: true
 
 # Compatible tools

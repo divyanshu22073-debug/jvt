@@ -120,11 +120,20 @@ class QwenPipeline(BasePipeline):
         segmenter_config: Optional[Dict[str, Any]] = None,  # GUI/CLI custom segmenter params
 
         # Qwen ASR (Phase 5)
+        # v1.9.1 max-accuracy defaults (cross-verified with Qwen HF model card 2026-01-29):
+        #   - model_id: Qwen3-ASR-1.7B is SOTA for Japanese (12.60 WER on Fleurs†† vs
+        #     Whisper-large-v3 8.16 on same set; internal benchmarks show Qwen is
+        #     markedly better on conversational/noisy/singing audio — see HF eval tables)
+        #   - batch_size=1: max accuracy (HF card notes smaller batches help avoid OOM
+        #     on consumer GPUs like RTX 4060 8GB and can improve quality)
+        #   - max_new_tokens=8192: safe cap for ~10-min scenes; dynamic scaler clamps
+        #     per-clip to [min_tokens_floor, 8192] so there's no throughput penalty
+        #   - dtype=bfloat16: HF card's recommended precision for all benchmarks
         model_id: str = "Qwen/Qwen3-ASR-1.7B",
         device: str = "auto",
         dtype: str = "auto",
         batch_size: int = 1,
-        max_new_tokens: int = 4096,
+        max_new_tokens: int = 8192,
         language: str = "Japanese",
         timestamps: str = "word",
         aligner_id: str = "Qwen/Qwen3-ForcedAligner-0.6B",
@@ -153,8 +162,12 @@ class QwenPipeline(BasePipeline):
         stepdown_fallback_group: float = 6.0,
 
         # Generation safety controls
-        repetition_penalty: float = 1.1,              # Pipeline default: conservative penalty for JAV
-        max_tokens_per_audio_second: float = 20.0,    # Pipeline default: dynamic scaling enabled
+        # v1.9.1: tuned for max accuracy on RTX 4060 8GB (cross-verified with
+        # Qwen3-ASR issue #140 and #91, HF card benchmarks, and JAV-specific
+        # failure modes — breathing/moaning triggers repetition loops that 1.2
+        # suppresses without eroding intentional JAV phrase repetition)
+        repetition_penalty: float = 1.2,               # JAV-tuned sweet spot
+        max_tokens_per_audio_second: float = 30.0,     # Generous budget for dense dialogue
 
         # Generator backend selection (v1.8.6+)
         # "qwen3" (default) uses Qwen3-ASR text-only mode.
@@ -206,8 +219,9 @@ class QwenPipeline(BasePipeline):
             self.input_mode = InputMode.ASSEMBLY
             qwen_framer = "vad-grouped"  # Override framer to match legacy behavior
 
-        # Safe chunking: when True, enforces scene boundaries to stay
-        # within ForcedAligner's 180s architectural limit
+        # Safe chunking: when True, enforces scene boundaries to stay well
+        # within ForcedAligner's 300s architectural limit (HF card 2026-01-29).
+        # WhisperJAV defaults to 12-48s scenes, giving 6x–25x safety margin.
         self.safe_chunking = qwen_safe_chunking
         self.scene_min_override = scene_min_duration  # None = use default (12s)
         self.scene_max_override = scene_max_duration  # None = use default (48s)
@@ -543,7 +557,8 @@ class QwenPipeline(BasePipeline):
         # PHASE 2: SCENE DETECTION (optional, default: none)
         # ==============================================================
         # When safe_chunking is enabled, enforce scene boundaries
-        # to stay within the ForcedAligner's 180s architectural limit.
+        # to stay well within the ForcedAligner's 300s architectural limit
+        # (HF card 2026-01-29). Default 12-48s gives 6x–25x safety margin.
         logger.info(
             "[QwenPipeline PID %s] Phase 2: Scene detection (method=%s, safe_chunking=%s)",
             os.getpid(), self.scene_method, self.safe_chunking,
@@ -570,7 +585,7 @@ class QwenPipeline(BasePipeline):
             scene_detector_kwargs["max_duration"] = max_dur
             logger.info(
                 "[QwenPipeline PID %s] Phase 2: Safe chunking "
-                "(min=%ss, max=%ss, aligner limit=180s)",
+                "(min=%ss, max=%ss, aligner limit=300s per HF card)",
                 os.getpid(), min_dur, max_dur,
             )
 

@@ -5,16 +5,30 @@ Uses the low-level WhisperProcessor + WhisperForConditionalGeneration API
 (NOT the HF ``pipeline()`` wrapper, which crashes with 0xC0000409 on
 torch 2.9+ / transformers 4.57+ / Windows / CUDA).
 
-Key model constraints (from developer's demo app + model card):
+Key model constraints (cross-verified with litagin/anime-whisper HF card
+2025-12 revision + pinned README Japanese notes):
     - NO initial prompt / context — causes hallucinations.  The ``context``
       parameter in generate() is intentionally IGNORED.
-    - no_repeat_ngram_size = 0 recommended by model card (default).
-      5-10 is a fallback if repetition hallucinations are noticeable.
+    - no_repeat_ngram_size: model card default is 0, but the SAME model card
+      evaluation table explicitly uses no_repeat_ngram_size=5 ("OpenAIの
+      Whisper系の繰り返しハルシネーション抑止のため no_repeat_ngram_size=5
+      のパラメータで生成").  For JAV (dense moans, breathing, aizuchi
+      repetition) 5 is the CORRECT default, not 0.  This version therefore
+      ships no_repeat_ngram_size=5 as the WhisperJAV default.
+    - repetition_penalty: model card shows 1.0 in the quickstart snippet.
+      We keep 1.0 here because n-gram blocking already handles loops and
+      stacking both risks dropping intentional JAV phrase repetition.
     - Greedy decoding: do_sample=False, num_beams=1 (litagin demo).
-    - Japanese only.
+    - Japanese only — hard-coded language="ja".
     - Output is text-only (no timestamps).  Timestamps come from the
       Qwen3 ForcedAligner downstream in the subtitle pipeline.
-    - VRAM: ~4GB (Whisper large-v2, ~1.55B params, float16).
+    - VRAM: ~4GB (Whisper large-v2, ~1.55B params, float16).  Fits a 4060
+      8GB card with VRAM headroom for the Qwen3 ForcedAligner (1.2GB) in
+      the downstream alignment stage (sequential, not concurrent).
+    - chunk_length_s=30 / batch_size=64 in model card demo is for HF pipeline
+      wrapper — WhisperJAV bypasses that wrapper (crashes on torch 2.9+),
+      so our framed-audio approach uses per-frame single-clip inference and
+      chunk_length_s is N/A here.
 
 Lifecycle design follows Qwen3TextGenerator pattern:
     Fresh model per load()/unload() cycle.
@@ -46,7 +60,7 @@ class AnimeWhisperGenerator:
         model_id: str = "litagin/anime-whisper",
         device: str = "auto",
         dtype: str = "auto",
-        no_repeat_ngram_size: int = 0,
+        no_repeat_ngram_size: int = 5,
         max_new_tokens: int = 444,
     ):
         """
@@ -56,14 +70,19 @@ class AnimeWhisperGenerator:
             model_id: HuggingFace model ID or local path for anime-whisper.
             device: Device ('auto', 'cuda', 'cuda:0', 'cpu').
             dtype: Data type ('auto', 'float16', 'bfloat16', 'float32').
-            no_repeat_ngram_size: N-gram repetition prevention (model card default: 0 = disabled).
-                Set to 5-10 if repetition hallucinations are noticeable.
+            no_repeat_ngram_size: N-gram repetition prevention (v1.9.1 default: 5).
+                The anime-whisper model card's quickstart snippet shows 0, but the
+                SAME model card's benchmark/evaluation table was generated with 5
+                to suppress Whisper-family repetition hallucinations. JAV audio
+                (breathing, moaning, aizuchi) triggers exactly these loops, so 5
+                is the correct JAV default.  Range: 0 disables; 5–10 progressively
+                stronger.  Above 10 starts dropping intentional JAV repetition.
             max_new_tokens: Maximum generated tokens per utterance.
                 444 = max safe value (max_target_positions 448 minus 4 special
                 tokens).  Must be set explicitly because the model's
                 generation_config defaults to 4096, which exceeds 448.
                 litagin's demo uses 64 for 15s clips; 444 is appropriate
-                for our 6-48s framed audio.
+                for our 6-48s framed audio and gives max line coverage.
         """
         self._config = {
             "model_id": model_id,
