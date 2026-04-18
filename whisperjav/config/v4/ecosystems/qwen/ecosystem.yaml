@@ -26,19 +26,25 @@ metadata:
   author: "WhisperJAV Team"
 
 # Default values inherited by all models in this ecosystem
+# All values cross-verified with Qwen3-ASR HF model card (2026-01-29) and
+# Qwen3-ASR Technical Report (arXiv:2601.21337).
 defaults:
   model.device: auto
-  model.dtype: bfloat16
-  model.max_inference_batch_size: 1  # batch_size=1 for accuracy
-  model.max_new_tokens: 4096  # Supports ~10 min audio (10 min × 400 char/min × 2 tokens/char)
-  decode.language: null  # null = auto-detect
+  model.dtype: bfloat16          # HF card: bfloat16 used in ALL benchmark evaluations
+  model.max_inference_batch_size: 1  # batch_size=1 for max accuracy on 8GB VRAM
+  model.max_new_tokens: 8192     # Safe cap for 10-min scenes; dynamic scaler clamps per-clip
+  decode.language: null          # null = auto-detect
   timestamps: word
   aligner.enabled: true
 
-# Architectural notes:
-# - ForcedAligner has 3-minute internal limit (MAX_FORCE_ALIGN_INPUT_SECONDS=180)
-# - For audio > 3 min, qwen-asr chunks internally but scene detection recommended
-# - max_new_tokens=4096 safely handles 5-10 min segments
+# Architectural notes (cross-verified with HF model card 2026-01-29):
+# - ForcedAligner supports up to 5 minutes (300s) per chunk in 11 languages
+#   incl. Japanese. AAS benchmark: 42.2ms (vs WhisperX 133ms avg).
+# - ASR without aligner: up to 20 min (1200s) per chunk.
+# - max_new_tokens=8192 safely covers ~10-min Japanese scenes (400 char/min
+#   × 2 tokens/char × 10 min = 8000 tokens). For longer audio, scene
+#   detection splits into manageable chunks.
+# - greedy decoding (temperature=0.01) is HF evaluation standard.
 
 # Implementation provider
 provider:

@@ -575,10 +575,12 @@ def parse_arguments():
                            help="Maximum inference batch size (default: 1 for accuracy)")
     qwen_gen_group.add_argument("--qwen-max-tokens", type=int, default=8192,
                            help="Maximum tokens to generate (default: 8192, supports ~10 min audio)")
-    qwen_gen_group.add_argument("--qwen-repetition-penalty", type=float, default=1.15,
-                           help="Repetition penalty (1.0=off, >1.0=penalize repeats; default: 1.15)")
-    qwen_gen_group.add_argument("--qwen-max-tokens-per-second", type=float, default=25.0,
-                           help="Dynamic token budget per audio second (0=disabled; default: 25.0)")
+    qwen_gen_group.add_argument("--qwen-repetition-penalty", type=float, default=1.2,
+                           help="Repetition penalty (1.0=off, 1.2=JAV sweet spot; default: 1.2). "
+                                "Suppresses loop-hallucinations on breathing/moaning audio. "
+                                ">1.25 risks dropping intentional JAV phrase repetition.")
+    qwen_gen_group.add_argument("--qwen-max-tokens-per-second", type=float, default=30.0,
+                           help="Dynamic token budget per audio second (0=disabled; default: 30.0 for dense Japanese dialogue)")
 
     # ── Qwen3-ASR: Alignment ─────────────────────────────────────────────
     qwen_align_group = parser.add_argument_group("Qwen3-ASR: Alignment")
@@ -1166,9 +1168,9 @@ def process_files_sync(media_files: List[Dict], args: argparse.Namespace, resolv
             "framer_srt_path": getattr(args, 'qwen_framer_srt_path', None),
             # Assembly text cleaner
             "assembly_cleaner": getattr(args, 'qwen_assembly_cleaner', True),
-            # Generation safety controls
-            "repetition_penalty": getattr(args, 'qwen_repetition_penalty', 1.15),
-            "max_tokens_per_audio_second": getattr(args, 'qwen_max_tokens_per_second', 25.0),
+            # Generation safety controls (v1.9.1: JAV-tuned for max accuracy)
+            "repetition_penalty": getattr(args, 'qwen_repetition_penalty', 1.2),
+            "max_tokens_per_audio_second": getattr(args, 'qwen_max_tokens_per_second', 30.0),
         }
         # Pipeline-owned defaults: only forward when user explicitly sets a value
         _scene_min = getattr(args, 'qwen_scene_min_duration', None)

@@ -35,10 +35,10 @@ class Qwen3TextGenerator:
         device: str = "auto",
         dtype: str = "auto",
         batch_size: int = 1,
-        max_new_tokens: int = 4096,
+        max_new_tokens: int = 8192,
         language: str = "Japanese",
-        repetition_penalty: float = 1.1,
-        max_tokens_per_audio_second: float = 20.0,
+        repetition_penalty: float = 1.2,
+        max_tokens_per_audio_second: float = 30.0,
         attn_implementation: str = "auto",
     ):
         """

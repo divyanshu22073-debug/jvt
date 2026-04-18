@@ -172,16 +172,17 @@ class QwenASR:
         dtype                     → dtype (torch.dtype)
         attn_implementation       → attn_implementation
 
-    Chunking Behavior (ISSUE-007):
+    Chunking Behavior (ISSUE-007, cross-verified with HF model card 2026-01-29):
         - stable_whisper.transcribe_any() does NOT chunk audio internally
         - It passes the full audio path to qwen_inference() callback
-        - qwen-asr handles chunking internally for audio > 180s (with aligner)
-        - For audio > 3 minutes with ForcedAligner:
-          * qwen-asr splits into 180s chunks
+        - qwen-asr handles chunking internally for audio > 300s (5 min, with aligner)
+        - For audio > 5 minutes with ForcedAligner:
+          * qwen-asr splits into <=300s chunks per the HF model card limit
           * Results are merged internally by qwen-asr
           * Timestamps may have minor discontinuities at chunk boundaries
-        - Recommendation: Use WhisperJAV scene detection for videos > 3 minutes
-          to get explicit control over chunk boundaries
+        - Recommendation: Use WhisperJAV scene detection for videos > 5 minutes
+          to get explicit control over chunk boundaries. WhisperJAV pipeline
+          defaults enforce 12-48s scenes (well below the 300s limit).
 
     Aligner Configuration (ISSUE-005):
         - ForcedAligner uses same device/dtype as main model by default
@@ -201,19 +202,31 @@ class QwenASR:
     DEFAULT_ALIGNER_ID = "Qwen/Qwen3-ForcedAligner-0.6B"
 
     # Default processing parameters
-    # NOTE: batch_size=1 produces more accurate transcriptions than larger batches
+    # NOTE: batch_size=1 produces more accurate transcriptions than larger batches.
+    # For RTX 4060 8GB VRAM with Qwen3-ASR-1.7B (~3.4GB) + ForcedAligner-0.6B
+    # (~1.2GB) loaded together, batch_size=1 is the safe default for max accuracy.
+    # Cross-verified: HF model card quickstart uses max_inference_batch_size=32
+    # for benchmarking, but JAV-ASR quality benefits from batch_size=1.
     DEFAULT_BATCH_SIZE = 1
 
-    # v1.9.0: Increased token limit for max coverage
+    # v1.9.1: Increased token limit for max coverage (cross-verified with HF card)
     # Calculation: 10 min audio x 400 chars/min x 2 tokens/char = 8000 tokens
-    # Default 8192 provides safe coverage for ~10 min audio segments
-    # For longer audio, scene detection should split into manageable chunks
+    # HF Qwen3-ASR card uses max_new_tokens=256 for short audio, 1024 for benchmarks,
+    # 2048 for vLLM demo, 4096 for vLLM+aligner demo. For JAV's 6-min scenes with
+    # dense dialogue (aizuchi + moaning + recurring phrases), 8192 is a safer cap.
+    # The dynamic scaler (_compute_dynamic_token_limit) always clamps the actual
+    # budget to the audio duration, so raising this ceiling is free.
     DEFAULT_MAX_NEW_TOKENS = 8192
 
-    # qwen-asr internal limits (from qwen_asr.inference.utils)
-    # Used for warnings and documentation
-    MAX_FORCE_ALIGN_SECONDS = 180  # 3 min limit when using ForcedAligner
-    MAX_ASR_SECONDS = 1200  # 20 min limit without ForcedAligner
+    # qwen-asr internal limits (cross-verified against HF model card 2026-01-29)
+    # HF card states: "Qwen3-ForcedAligner-0.6B supports timestamp prediction for
+    # arbitrary units within up to 5 minutes of speech in 11 languages"
+    # HF card states: "Qwen3-ASR-1.7B and Qwen3-ASR-0.6B naturally support single
+    # speech no longer than 20 minutes"
+    # Previous MAX_FORCE_ALIGN_SECONDS=180 was from an older qwen-asr internal
+    # constant that has since been relaxed. Using 300 matches the model card.
+    MAX_FORCE_ALIGN_SECONDS = 300  # 5 min limit when using ForcedAligner (HF card)
+    MAX_ASR_SECONDS = 1200  # 20 min limit without ForcedAligner (HF card)
 
     def __init__(
         self,
@@ -232,10 +245,22 @@ class QwenASR:
         # Japanese post-processing (v1.8.4+)
         japanese_postprocess: bool = True,  # Apply Japanese-specific regrouping
         postprocess_preset: str = "high_moan",  # Preset: "high_moan" (default for JAV), "default", "narrative"
-        # Generation safety controls (v1.9.0: tuned for max accuracy)
-        repetition_penalty: float = 1.15,          # 1.0 = off; >1.0 penalizes repeated tokens via HF generation_config
-        max_tokens_per_audio_second: float = 25.0,  # 0 = disabled; >0 = dynamic per-scene token budget scaling
-        min_tokens_floor: int = 384,               # minimum token budget when dynamic scaling is active
+        # Generation safety controls (v1.9.1: tuned for MAX accuracy on RTX 4060 8GB)
+        # Research sources (2026):
+        #   - HF Qwen3-ASR card: greedy decoding (temperature=0.01) used in all
+        #     evaluations. No explicit repetition_penalty recommended — the model
+        #     is robust to loops in clean speech.
+        #   - Qwen3-ASR issue #140, Qwen3-VL issue #1611: repetition loops DO occur
+        #     in noisy / non-speech audio (breathing, moaning, BGM) — exactly the
+        #     JAV-relevant failure mode. 1.15–1.25 is the sweet spot per issue threads
+        #     (higher than 1.25 starts dropping legitimate repeated 気持ちいい phrases).
+        #   - Dynamic token budget scales per-clip: 30 tok/s × duration, clamped
+        #     to [min_tokens_floor, max_new_tokens]. For dense JAV dialogue with
+        #     aizuchi + moans, 30 tok/s gives generous headroom without blowing
+        #     the static cap on long scenes.
+        repetition_penalty: float = 1.2,            # 1.0 = off; 1.2 is JAV-tuned sweet spot (loops die, 気持ちいい survives)
+        max_tokens_per_audio_second: float = 30.0,  # Generous budget for dense JAV dialogue (prev 25.0)
+        min_tokens_floor: int = 512,                # Raised floor protects very short moan-only clips from premature EOS (prev 384)
     ):
         """
         Initialize QwenASR.
@@ -687,8 +712,9 @@ class QwenASR:
         if audio_duration > 0:
             duration_str = f"{audio_duration:.0f}s" if audio_duration < 60 else f"{audio_duration/60:.1f}min"
             progress_msg = f"Transcribing {duration_str} audio: {audio_path.name}"
-            if audio_duration > 180:
-                # Warn about expected processing time for long audio
+            if audio_duration > 300:
+                # Warn about expected processing time for long audio (>5 min)
+                # Above 300s the ForcedAligner auto-chunks internally per HF card
                 logger.info(f"Processing {duration_str} audio - this may take several minutes...")
         else:
             progress_msg = f"Transcribing: {audio_path.name}"
